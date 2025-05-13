@@ -1,5 +1,36 @@
 import customtkinter as ctk
 import pymysql
+import socket
+
+# SMTP 서버와 연결 함수
+def send_to_smtp_server(mail):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect(('localhost', 1025))
+            s.recv(1024)
+
+            s.sendall(b"HELO dku.edu\r\n")
+            s.recv(1024)
+
+            s.sendall(f"MAIL FROM:<sender@dku.edu>\r\n".encode())
+            s.recv(1024)
+
+            s.sendall(f"RCPT TO:<{mail['to']}>\r\n".encode())
+            s.recv(1024)
+
+            s.sendall(b"DATA\r\n")
+            s.recv(1024)
+
+            body = f"Subject: {mail['subject']}\r\n\r\n{mail['body']}\r\n.\r\n"
+            s.sendall(body.encode())
+            s.recv(1024)
+
+            s.sendall(b"QUIT\r\n")
+            s.recv(1024)
+            return True
+    except Exception as e:
+        print("SMTP 오류:", e)
+        return False
 
 # 사용자 등록 함수
 def register_user():
@@ -9,11 +40,8 @@ def register_user():
     if username and password:
         try:
             conn = pymysql.connect(
-                host='127.0.0.1',
-                user='root',
-                password='bk051014',
-                database='user_mgmt',
-                charset='utf8mb4'
+                host='127.0.0.1', user='root', password='bk051014',
+                database='user_mgmt', charset='utf8mb4'
             )
             cursor = conn.cursor()
             sql = "INSERT IGNORE INTO users (username, password) VALUES (%s, %s)"
@@ -27,7 +55,7 @@ def register_user():
             cursor.close()
             conn.close()
 
-# 로그인 함수 (존재 여부만 확인)
+# 로그인 함수
 def login_user():
     username = username_entry.get()
     password = password_entry.get()
@@ -35,11 +63,8 @@ def login_user():
     if username and password:
         try:
             conn = pymysql.connect(
-                host='127.0.0.1',
-                user='root',
-                password='bk051014',
-                database='user_mgmt',
-                charset='utf8mb4'
+                host='127.0.0.1', user='root', password='bk051014',
+                database='user_mgmt', charset='utf8mb4'
             )
             cursor = conn.cursor()
             sql = "SELECT * FROM users WHERE username=%s AND password=%s"
@@ -58,7 +83,7 @@ def login_user():
             cursor.close()
             conn.close()
 
-# GUI 초기 설정
+# GUI 설정
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
 
@@ -66,9 +91,9 @@ app = ctk.CTk()
 app.title("DKU Networking Mail")
 app.geometry("900x600")
 
-sent_box = []  # 보낸 메일 저장
+sent_box = []
 
-# ===== 로그인 화면 =====
+# 로그인 프레임
 login_frame = ctk.CTkFrame(app)
 login_frame.pack(expand=True)
 
@@ -85,12 +110,9 @@ login_button.pack(pady=5)
 register_button.pack(pady=5)
 info_label.pack(pady=5)
 
-# ===== 실제 메일 화면은 로그인 후 표시 =====
 main_frame = ctk.CTkFrame(app)
-
 frame_menu = ctk.CTkFrame(main_frame, width=200, fg_color="#f0f0f0")
 frame_menu.pack(side="left", fill="y")
-
 frame_main = ctk.CTkFrame(main_frame, fg_color="white")
 frame_main.pack(side="right", fill="both", expand=True)
 
@@ -124,12 +146,15 @@ def send_mail():
         "body": body_text.get("0.0", "end").strip()
     }
     if mail["to"] and mail["subject"] and mail["body"]:
-        sent_box.append(mail)
-        to_entry.delete(0, "end")
-        subject_entry.delete(0, "end")
-        body_text.delete("0.0", "end")
-        update_sent_view()
-        show_frame(frame_sent)
+        if send_to_smtp_server(mail):
+            sent_box.append(mail)
+            to_entry.delete(0, "end")
+            subject_entry.delete(0, "end")
+            body_text.delete("0.0", "end")
+            update_sent_view()
+            show_frame(frame_sent)
+        else:
+            info_label.configure(text="메일 전송 실패")
 
 def update_sent_view():
     sent_listbox.delete("0.0", "end")
@@ -139,7 +164,7 @@ def update_sent_view():
 send_button.configure(command=send_mail)
 
 title_label = ctk.CTkLabel(frame_menu, text="DKU Mail", font=("Arial", 22, "bold"))
-title_label.pack(pady=40,padx=40)
+title_label.pack(pady=40, padx=40)
 
 compose_btn = ctk.CTkButton(frame_menu, text="Compose", width=160, command=lambda: show_frame(frame_compose))
 inbox_btn = ctk.CTkButton(frame_menu, text="Inbox", width=160, command=lambda: show_frame(frame_inbox), fg_color="#e0e0e0")
